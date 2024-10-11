@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <link rel="stylesheet" href="stylesheets/style.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+  <!-- <h1 class="text-5xl tricking-tighter text-center text-red-400 underline decoration-orange-300 bg-yellow-200">Mongo App</h1> -->
+
+  <div class=" h-screen w-full   bg-zinc-500 p-10 ">
+    <div class="nav mb-10">
+       <a class="text-blue-500" href="/read">Read Users</a>
+    </div>
+    <form action="/create" method="POST">
+        <h1 class="text-5xl tricking-tighter text-center mb-5 text-white">Create User</h1>
+        <input  class="px-5 py-2 bg-transparent border-2  border-zinc-800 rounded-md text-white outline-none" type="text" name="name" placeholder="name">
+        <input  class="px-5 py-2 bg-transparent border-2  border-zinc-800 rounded-md text-white outline-none" type="text" name="email" placeholder="email">
+        <input  class="px-5 py-2 bg-transparent border-2  border-zinc-800 rounded-md text-white outline-none" type="text" name="image" placeholder="image">
+        <input class="px-5 py-2 bg-blue-400 rounded-md text-white ml-3" type="submit" value="create user">
+    </form>
+  </div>
+    
+
+    <script src="/javascripts/script.js"></script>
+</body>
+</html>
