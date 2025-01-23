@@ -4,78 +4,116 @@ const path = require("path")
 const app = express()
 const userModel = require("./models/user")
 
-
+// Load environment variables first
 require("dotenv").config()
 
-let cachedDb = null
-async function connectToDatabase() {
-  if (cachedDb) {
-    return cachedDb
+// Improved MongoDB connection with error handling
+const connectToDatabase = async () => {
+  try {
+    if (mongoose.connection.readyState === 1) {
+      return mongoose.connection
+    }
+
+    const conn = await mongoose.connect(process.env.MONGO_URL, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      bufferCommands: false,
+      serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
+    })
+
+    console.log("MongoDB Connected")
+    return conn
+  } catch (error) {
+    console.error("MongoDB connection error:", error)
+    throw error
   }
-  const db = await mongoose.connect(process.env.MONGO_URL, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
-  cachedDb = db
-  return db
 }
 
+// Configure express
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 app.set("view engine", "ejs")
 app.set("views", path.join(__dirname, "views"))
 app.use(express.static(path.join(__dirname, "public")))
 
+// Wrap route handlers in try-catch
 app.get("/", async (req, res) => {
-  await connectToDatabase()
-  res.render("index")
+  try {
+    await connectToDatabase()
+    res.render("index")
+  } catch (error) {
+    console.error("Error in / route:", error)
+    res.status(500).render("error", { error: "Failed to load page" })
+  }
 })
 
 app.get("/read", async (req, res) => {
-  await connectToDatabase()
-  const users = await userModel.find()
-  res.render("view", {
-    users,
-  })
+  try {
+    await connectToDatabase()
+    const users = await userModel.find()
+    res.render("view", { users })
+  } catch (error) {
+    console.error("Error in /read route:", error)
+    res.status(500).render("error", { error: "Failed to load users" })
+  }
 })
 
 app.post("/create", async (req, res) => {
-  await connectToDatabase()
-  const { name, image, email } = req.body
-  const createdUser = await userModel.create({
-    name,
-    email,
-    image,
-  })
-  res.redirect("/read")
+  try {
+    await connectToDatabase()
+    const { name, image, email } = req.body
+    await userModel.create({ name, email, image })
+    res.redirect("/read")
+  } catch (error) {
+    console.error("Error in /create route:", error)
+    res.status(500).render("error", { error: "Failed to create user" })
+  }
 })
 
 app.get("/edit/:id", async (req, res) => {
-  await connectToDatabase()
-  const user = await userModel.findOne({ _id: req.params.id })
-  res.render("edit", { user })
+  try {
+    await connectToDatabase()
+    const user = await userModel.findById(req.params.id)
+    if (!user) {
+      return res.status(404).render("error", { error: "User not found" })
+    }
+    res.render("edit", { user })
+  } catch (error) {
+    console.error("Error in /edit route:", error)
+    res.status(500).render("error", { error: "Failed to load user" })
+  }
 })
 
 app.post("/update/:id", async (req, res) => {
-  await connectToDatabase()
-  const { name, image, email } = req.body
-  const user = await userModel.findOneAndUpdate({ _id: req.params.id }, { name, image, email }, { new: true })
-  res.redirect("/read")
+  try {
+    await connectToDatabase()
+    const { name, image, email } = req.body
+    await userModel.findByIdAndUpdate(req.params.id, { name, image, email })
+    res.redirect("/read")
+  } catch (error) {
+    console.error("Error in /update route:", error)
+    res.status(500).render("error", { error: "Failed to update user" })
+  }
 })
 
 app.get("/delete/:id", async (req, res) => {
-  await connectToDatabase()
-  const users = await userModel.findOneAndDelete({ _id: req.params.id })
-  res.redirect("/read")
+  try {
+    await connectToDatabase()
+    await userModel.findByIdAndDelete(req.params.id)
+    res.redirect("/read")
+  } catch (error) {
+    console.error("Error in /delete route:", error)
+    res.status(500).render("error", { error: "Failed to delete user" })
+  }
 })
 
+// Global error handler
 app.use((err, req, res, next) => {
-  console.error("Unhandled error:", err.stack || err.message)
-  res.status(500).send("Internal Server Error")
+  console.error("Unhandled error:", err)
+  res.status(500).render("error", { error: "An unexpected error occurred" })
 })
 
 module.exports = app
-
 
 
 
