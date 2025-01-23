@@ -1,8 +1,24 @@
 const express = require("express");
+const mongoose = require("mongoose");
 const path = require("path");
 const app = express();
 const userModel = require("./models/user");
 
+
+
+mongoose.connect(process.env.MONGO_URL, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+}).then(() => {
+  console.log("Connected to MongoDB successfully!");
+})
+.catch((error) => {
+  console.error("Error connecting to MongoDB:", error.message);
+});
+
+// console.log(process.env.MONGO_URL);
+
+require("dotenv").config();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.set("view engine", "ejs");
@@ -26,7 +42,7 @@ app.post("/create", async function (req, res) {
       email,
       image,
     });
-  
+    // console.log(createdUser);
     res.redirect("/read");
   });
 

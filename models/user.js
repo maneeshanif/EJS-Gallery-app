@@ -1,8 +1,7 @@
 const mongoose = require("mongoose");
-mongoose.connect(`process.env.Mongo_Url`, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-});
+require("dotenv").config();
+
+
 
 const userSchema = mongoose.Schema({
     name: String,
