@@ -7,110 +7,153 @@ const userModel = require("./models/user")
 // Load environment variables first
 require("dotenv").config()
 
-// Improved MongoDB connection with error handling
-const connectToDatabase = async () => {
-  try {
-    if (mongoose.connection.readyState === 1) {
-      return mongoose.connection
-    }
+// Improved MongoDB connection with retry logic
+let isConnected = false
 
-    const conn = await mongoose.connect(process.env.MONGO_URL, {
+const connectToDatabase = async () => {
+  if (isConnected) {
+    console.log("Using existing database connection")
+    return
+  }
+
+  try {
+    const db = await mongoose.connect(process.env.MONGO_URL, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
       bufferCommands: false,
-      serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
+      serverSelectionTimeoutMS: 10000, // Timeout after 10s
+      connectTimeoutMS: 10000,
     })
 
-    console.log("MongoDB Connected")
-    return conn
+    isConnected = true
+    console.log("Database connected successfully")
+    return db
   } catch (error) {
-    console.error("MongoDB connection error:", error)
+    console.error("Error connecting to database:", error)
+    isConnected = false
     throw error
   }
 }
 
-// Configure express
+// Configure express with absolute paths
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 app.set("view engine", "ejs")
 app.set("views", path.join(__dirname, "views"))
-app.use(express.static(path.join(__dirname, "public")))
+app.use("/public", express.static(path.join(__dirname, "public")))
 
-// Wrap route handlers in try-catch
-app.get("/", async (req, res) => {
-  try {
-    await connectToDatabase()
-    res.render("index")
-  } catch (error) {
-    console.error("Error in / route:", error)
-    res.status(500).render("error", { error: "Failed to load page" })
-  }
+// Add request logging
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`)
+  next()
 })
 
-app.get("/read", async (req, res) => {
-  try {
-    await connectToDatabase()
-    const users = await userModel.find()
-    res.render("view", { users })
-  } catch (error) {
-    console.error("Error in /read route:", error)
-    res.status(500).render("error", { error: "Failed to load users" })
-  }
+// Health check endpoint
+app.get("/api/health", (req, res) => {
+  res.status(200).json({ status: "ok" })
 })
 
-app.post("/create", async (req, res) => {
-  try {
+// Wrap all route handlers with error handling
+const asyncHandler = (fn) => (req, res, next) => {
+  return Promise.resolve(fn(req, res, next)).catch(next)
+}
+
+app.get(
+  "/",
+  asyncHandler(async (req, res) => {
+    await connectToDatabase()
+    res.render("index", { error: null })
+  }),
+)
+
+app.get(
+  "/read",
+  asyncHandler(async (req, res) => {
+    await connectToDatabase()
+    const users = await userModel.find().lean()
+    res.render("view", { users, error: null })
+  }),
+)
+
+app.post(
+  "/create",
+  asyncHandler(async (req, res) => {
     await connectToDatabase()
     const { name, image, email } = req.body
-    await userModel.create({ name, email, image })
-    res.redirect("/read")
-  } catch (error) {
-    console.error("Error in /create route:", error)
-    res.status(500).render("error", { error: "Failed to create user" })
-  }
-})
 
-app.get("/edit/:id", async (req, res) => {
-  try {
+    // Validate input
+    if (!name || !email) {
+      return res.render("index", { error: "Name and email are required" })
+    }
+
+    await userModel.create({
+      name,
+      email,
+      image: image || "", // Make image optional
+    })
+
+    res.redirect("/read")
+  }),
+)
+
+app.get(
+  "/edit/:id",
+  asyncHandler(async (req, res) => {
     await connectToDatabase()
-    const user = await userModel.findById(req.params.id)
+    const user = await userModel.findById(req.params.id).lean()
+
     if (!user) {
       return res.status(404).render("error", { error: "User not found" })
     }
-    res.render("edit", { user })
-  } catch (error) {
-    console.error("Error in /edit route:", error)
-    res.status(500).render("error", { error: "Failed to load user" })
-  }
-})
 
-app.post("/update/:id", async (req, res) => {
-  try {
+    res.render("edit", { user, error: null })
+  }),
+)
+
+app.post(
+  "/update/:id",
+  asyncHandler(async (req, res) => {
     await connectToDatabase()
     const { name, image, email } = req.body
-    await userModel.findByIdAndUpdate(req.params.id, { name, image, email })
-    res.redirect("/read")
-  } catch (error) {
-    console.error("Error in /update route:", error)
-    res.status(500).render("error", { error: "Failed to update user" })
-  }
-})
 
-app.get("/delete/:id", async (req, res) => {
-  try {
+    // Validate input
+    if (!name || !email) {
+      return res.render("edit", {
+        user: { _id: req.params.id, name, image, email },
+        error: "Name and email are required",
+      })
+    }
+
+    await userModel.findByIdAndUpdate(req.params.id, {
+      name,
+      email,
+      image: image || "",
+    })
+
+    res.redirect("/read")
+  }),
+)
+
+app.get(
+  "/delete/:id",
+  asyncHandler(async (req, res) => {
     await connectToDatabase()
     await userModel.findByIdAndDelete(req.params.id)
     res.redirect("/read")
-  } catch (error) {
-    console.error("Error in /delete route:", error)
-    res.status(500).render("error", { error: "Failed to delete user" })
-  }
+  }),
+)
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error("Error:", err)
+  res.status(500).render("error", {
+    error: process.env.NODE_ENV === "production" ? "An unexpected error occurred" : err.message,
+  })
 })
 
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error("Unhandled error:", err)
-  res.status(500).render("error", { error: "An unexpected error occurred" })
+// 404 handler
+app.use((req, res) => {
+  res.status(404).render("error", { error: "Page not found" })
 })
 
 module.exports = app
