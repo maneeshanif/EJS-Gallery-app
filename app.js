@@ -65,6 +65,13 @@ app.get("/delete/:id", async function (req, res) {
   res.redirect("/read");
 });
 
+
+app.use((err, req, res, next) => {
+  console.error("Unhandled error:", err.stack || err.message);
+  res.status(500).send("Internal Server Error");
+});
+
+
 module.exports = app;
 
 app.listen(process.env.PORT || 3000).addListener("listening", () => {
