@@ -67,4 +67,6 @@ app.get("/delete/:id", async function (req, res) {
 
 module.exports = app;
 
-app.listen(3000);
+app.listen(process.env.PORT || 3000).addListener("listening", () => {
+  console.log("Server is running on port 3000");
+});
