@@ -7,30 +7,35 @@ const userModel = require("./models/user")
 // Load environment variables first
 require("dotenv").config()
 
-// Improved MongoDB connection with retry logic
-let isConnected = false
+// Validate MongoDB URL
+if (!process.env.MONGO_URL) {
+  throw new Error("MONGO_URL environment variable is not defined")
+}
 
+// Improved MongoDB connection with validation
 const connectToDatabase = async () => {
-  if (isConnected) {
-    console.log("Using existing database connection")
-    return
-  }
-
   try {
-    const db = await mongoose.connect(process.env.MONGO_URL, {
+    if (mongoose.connection.readyState === 1) {
+      return mongoose.connection
+    }
+
+    // Ensure MONGO_URL is a string and properly formatted
+    const mongoUrl = process.env.MONGO_URL
+    if (typeof mongoUrl !== "string") {
+      throw new Error("MONGO_URL must be a string")
+    }
+
+    await mongoose.connect(mongoUrl, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
       bufferCommands: false,
-      serverSelectionTimeoutMS: 10000, // Timeout after 10s
-      connectTimeoutMS: 10000,
+      serverSelectionTimeoutMS: 10000,
     })
 
-    isConnected = true
-    console.log("Database connected successfully")
-    return db
+    console.log("MongoDB Connected Successfully")
+    return mongoose.connection
   } catch (error) {
-    console.error("Error connecting to database:", error)
-    isConnected = false
+    console.error("MongoDB Connection Error:", error)
     throw error
   }
 }
@@ -58,13 +63,17 @@ const asyncHandler = (fn) => (req, res, next) => {
   return Promise.resolve(fn(req, res, next)).catch(next)
 }
 
-app.get(
-  "/",
-  asyncHandler(async (req, res) => {
+app.get("/", async (req, res) => {
+  try {
     await connectToDatabase()
     res.render("index", { error: null })
-  }),
-)
+  } catch (error) {
+    console.error("Error:", error)
+    res.status(500).render("error", {
+      error: "Database connection failed. Please check your configuration.",
+    })
+  }
+})
 
 app.get(
   "/read",
